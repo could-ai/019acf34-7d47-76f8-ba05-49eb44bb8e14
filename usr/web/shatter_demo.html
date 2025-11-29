@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shatter Button Effect</title>
+    <style>
+        :root {
+            /* Tunables */
+            --primary-color: #6200EE;
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --anim-duration: 1.5s;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .cta-button {
+            position: relative;
+            padding: 20px 48px;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            color: var(--text-color);
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(98, 0, 238, 0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            z-index: 10;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(98, 0, 238, 0.5);
+        }
+
+        .cta-button:active {
+            transform: translateY(1px);
+        }
+
+        .fragment {
+            position: absolute;
+            background-color: var(--primary-color);
+            pointer-events: none;
+            opacity: 1;
+            border-radius: 2px;
+        }
+
+        /* Success Message (Hidden by default) */
+        #success-msg {
+            display: none;
+            color: white;
+            text-align: center;
+            animation: fadeIn 1s forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <button id="btn" class="cta-button">GET STARTED</button>
+    
+    <div id="success-msg">
+        <h1>Redirecting...</h1>
+    </div>
+
+    <script>
+        // Configuration
+        const REDIRECT_URL = "https://flutter.dev";
+        const GRID_ROWS = 10;
+        const GRID_COLS = 10;
+
+        const btn = document.getElementById('btn');
+        const successMsg = document.getElementById('success-msg');
+
+        btn.addEventListener('click', function(e) {
+            const rect = btn.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+            
+            // Hide original button but keep space? No, let's just hide it visually
+            btn.style.opacity = '0';
+            btn.style.pointerEvents = 'none';
+
+            const fragWidth = width / GRID_COLS;
+            const fragHeight = height / GRID_ROWS;
+
+            // Create fragments
+            for(let i=0; i<GRID_ROWS; i++) {
+                for(let j=0; j<GRID_COLS; j++) {
+                    createFragment(i, j, rect, fragWidth, fragHeight);
+                }
+            }
+
+            // Redirect after animation
+            setTimeout(() => {
+                successMsg.style.display = 'block';
+                // window.location.href = REDIRECT_URL; // Uncomment to actually redirect
+            }, 1500);
+        });
+
+        function createFragment(row, col, rect, w, h) {
+            const frag = document.createElement('div');
+            frag.classList.add('fragment');
+            frag.style.width = `${w}px`;
+            frag.style.height = `${h}px`;
+            
+            // Initial position matches button position
+            const startX = rect.left + (col * w);
+            const startY = rect.top + (row * h);
+            
+            frag.style.left = `${startX}px`;
+            frag.style.top = `${startY}px`;
+            
+            document.body.appendChild(frag);
+
+            // Calculate explosion trajectory
+            // Vector from center
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const fragCenterX = startX + w/2;
+            const fragCenterY = startY + h/2;
+
+            let dirX = fragCenterX - centerX;
+            let dirY = fragCenterY - centerY;
+
+            // Add randomness
+            dirX += (Math.random() - 0.5) * 20;
+            dirY += (Math.random() - 0.5) * 20;
+
+            // Normalize and scale
+            const dist = Math.sqrt(dirX*dirX + dirY*dirY) || 1;
+            const force = 1000 + Math.random() * 500; // Distance to fly
+            
+            const moveX = (dirX / dist) * force;
+            const moveY = (dirY / dist) * force;
+            const rotate = (Math.random() - 0.5) * 720;
+            const delay = Math.random() * 0.3; // Stagger
+
+            // Animate using Web Animations API for performance
+            const animation = frag.animate([
+                { transform: `translate(0, 0) rotate(0deg) scale(1)`, opacity: 1 },
+                { transform: `translate(${moveX}px, ${moveY}px) rotate(${rotate}deg) scale(0)`, opacity: 0 }
+            ], {
+                duration: 1500,
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)', // Ease out expo
+                delay: delay * 1000,
+                fill: 'forwards'
+            });
+
+            animation.onfinish = () => frag.remove();
+        }
+    </script>
+</body>
+</html>

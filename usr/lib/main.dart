@@ -1,4 +1,16 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+
+// ==========================================
+// 🎛️ TUNABLES / CONFIGURATION
+// ==========================================
+const String kRedirectUrl = 'https://flutter.dev'; // URL to redirect to
+const Color kPrimaryColor = Color(0xFF6200EE); // Button Color
+const Color kBackgroundColor = Color(0xFF121212); // Page Background
+const int kGridSize = 10; // 10x10 grid = 100 fragments
+const Duration kAnimationDuration = Duration(milliseconds: 1500);
+const double kExplosionForce = 1.5; // Multiplier for distance
 
 void main() {
   runApp(const MyApp());
@@ -7,117 +19,292 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Shatter Button Demo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: kBackgroundColor,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: kPrimaryColor,
+          brightness: Brightness.dark,
+        ),
       ),
+      // Ensure strict routing for web
       initialRoute: '/',
       routes: {
-        '/': (context) => const MyHomePage(title: 'Flutter Demo Home Page'),
+        '/': (context) => const ShatterPage(),
+        '/success': (context) => const SuccessPage(),
       },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class ShatterPage extends StatefulWidget {
+  const ShatterPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<ShatterPage> createState() => _ShatterPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _ShatterPageState extends State<ShatterPage> with TickerProviderStateMixin {
+  final GlobalKey _buttonKey = GlobalKey();
+  bool _isShattered = false;
+  List<Fragment> _fragments = [];
+  late AnimationController _controller;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: kAnimationDuration,
+    );
+
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _handleRedirect();
+      }
     });
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleRedirect() {
+    // Simulate redirection
+    Navigator.of(context).pushReplacementNamed('/success');
+  }
+
+  void _shatterButton() {
+    final RenderBox? renderBox = _buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final Size size = renderBox.size;
+    final Offset position = renderBox.localToGlobal(Offset.zero);
+    final double fragmentWidth = size.width / kGridSize;
+    final double fragmentHeight = size.height / kGridSize;
+
+    final Random random = Random();
+    final List<Fragment> newFragments = [];
+    final Size screenSize = MediaQuery.of(context).size;
+
+    // Generate fragments
+    for (int i = 0; i < kGridSize; i++) {
+      for (int j = 0; j < kGridSize; j++) {
+        // Initial position (relative to screen)
+        final double startX = position.dx + (j * fragmentWidth);
+        final double startY = position.dy + (i * fragmentHeight);
+
+        // Target position (spread outwards covering screen)
+        // We calculate a vector from center of button to the fragment
+        final double centerX = position.dx + size.width / 2;
+        final double centerY = position.dy + size.height / 2;
+        
+        final double fragCenterX = startX + fragmentWidth / 2;
+        final double fragCenterY = startY + fragmentHeight / 2;
+
+        // Direction vector
+        double dirX = fragCenterX - centerX;
+        double dirY = fragCenterY - centerY;
+
+        // Add some randomness to direction
+        dirX += (random.nextDouble() - 0.5) * 20;
+        dirY += (random.nextDouble() - 0.5) * 20;
+
+        // Normalize and scale to cover screen
+        // We want them to fly far off screen or to the edges
+        final double distance = sqrt(dirX * dirX + dirY * dirY);
+        final double scale = (max(screenSize.width, screenSize.height) / (distance == 0 ? 1 : distance)) * kExplosionForce;
+        
+        // Add randomness to speed/distance
+        final double randomScale = scale * (0.8 + random.nextDouble() * 0.5);
+
+        final double endX = startX + (dirX * randomScale);
+        final double endY = startY + (dirY * randomScale);
+
+        newFragments.add(Fragment(
+          startX: startX,
+          startY: startY,
+          endX: endX,
+          endY: endY,
+          width: fragmentWidth,
+          height: fragmentHeight,
+          rotation: (random.nextDouble() - 0.5) * 4 * pi, // Random rotation
+          delay: random.nextDouble() * 0.3, // Staggered start (0 to 30% of duration)
+          scale: 0.5 + random.nextDouble(), // Random final scale
+          color: kPrimaryColor,
+        ));
+      }
+    }
+
+    setState(() {
+      _fragments = newFragments;
+      _isShattered = true;
+    });
+
+    _controller.forward();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+      body: Stack(
+        children: [
+          // 1. The Fragments (Visible only when shattered)
+          if (_isShattered)
+            ..._fragments.map((fragment) {
+              return AnimatedBuilder(
+                animation: _controller,
+                builder: (context, child) {
+                  // Calculate progress based on delay
+                  final double t = _controller.value;
+                  // Normalize t based on delay: start later, finish at 1.0
+                  // Effective time = (t - delay) / (1 - delay)
+                  double effectiveT = (t - fragment.delay) / (1.0 - fragment.delay);
+                  effectiveT = effectiveT.clamp(0.0, 1.0);
+                  
+                  // Curved animation for smooth physics
+                  final double curveVal = Curves.easeOutExpo.transform(effectiveT);
+
+                  // Interpolate position
+                  final double currentX = fragment.startX + (fragment.endX - fragment.startX) * curveVal;
+                  final double currentY = fragment.startY + (fragment.endY - fragment.startY) * curveVal;
+
+                  // Fade out near the end
+                  final double opacity = (1.0 - effectiveT * 1.2).clamp(0.0, 1.0);
+
+                  return Positioned(
+                    left: currentX,
+                    top: currentY,
+                    child: Transform.rotate(
+                      angle: fragment.rotation * effectiveT,
+                      child: Transform.scale(
+                        scale: 1.0 - (0.5 * effectiveT), // Shrink slightly as they fly
+                        child: Opacity(
+                          opacity: opacity,
+                          child: Container(
+                            width: fragment.width,
+                            height: fragment.height,
+                            decoration: BoxDecoration(
+                              color: fragment.color,
+                              // Add slight border radius for "debris" look
+                              borderRadius: BorderRadius.circular(1), 
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            }),
+
+          // 2. The Main Button (Visible until shattered)
+          if (!_isShattered)
+            Center(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: _shatterButton,
+                  child: Container(
+                    key: _buttonKey,
+                    padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 24),
+                    decoration: BoxDecoration(
+                      color: kPrimaryColor,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: kPrimaryColor.withOpacity(0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'GET STARTED',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
+    );
+  }
+}
+
+// Data model for a single shard/fragment
+class Fragment {
+  final double startX;
+  final double startY;
+  final double endX;
+  final double endY;
+  final double width;
+  final double height;
+  final double rotation;
+  final double delay;
+  final double scale;
+  final Color color;
+
+  Fragment({
+    required this.startX,
+    required this.startY,
+    required this.endX,
+    required this.endY,
+    required this.width,
+    required this.height,
+    required this.rotation,
+    required this.delay,
+    required this.scale,
+    required this.color,
+  });
+}
+
+// Simple Success Page to demonstrate redirect
+class SuccessPage extends StatelessWidget {
+  const SuccessPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text('$_counter', style: Theme.of(context).textTheme.headlineMedium),
+          children: [
+            const Icon(Icons.check_circle_outline, size: 100, color: Colors.green),
+            const SizedBox(height: 20),
+            const Text(
+              'Redirected Successfully!',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Welcome to $kRedirectUrl',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 40),
+            OutlinedButton(
+              onPressed: () {
+                 Navigator.of(context).pushReplacementNamed('/');
+              },
+              child: const Text('RESET DEMO'),
+            )
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
